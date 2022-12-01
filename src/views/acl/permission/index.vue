@@ -1,0 +1,216 @@
+<template>
+  <div>
+    <el-table
+      border
+      style="margin-bottom: 20px;"
+      :data="menuPermissionList"
+      :expand-row-keys="expandKeys"
+      row-key="id"
+    >
+      <el-table-column
+        prop="name"
+        label="名称"
+      />
+      <el-table-column
+        prop="code"
+        label="权限值"
+      />
+
+      <el-table-column
+        prop="toCode"
+        label="跳转权限值"
+      />
+
+      <el-table-column label="操作">
+        <template slot-scope="{row}">
+          
+          <HintButton
+            :disabled="row.level===4"
+            type="primary"
+            icon="el-icon-plus"
+            size="mini"
+            @click="toAddPermission(row)"
+            :title="getAddTitle(row.level)"
+          />
+
+          <HintButton
+            type="primary"
+            icon="el-icon-edit"
+            size="mini"
+            :disabled="row.level===1"
+            @click="toUpdatePermission(row)"
+            :title="row.level===4 ? '修改功能' : '修改菜单'"
+          />
+
+          <HintButton
+            :disabled="row.level===1"
+            type="danger"
+            icon="el-icon-delete"
+            size="mini"
+            @click="removePermission(row)"
+            title="删除"
+          />
+        </template>
+      </el-table-column>
+    </el-table>
+
+    
+  </div>
+</template>
+
+<script>
+
+// 菜单权限校验的规则
+const menuRules = { 
+  name: [{required: true, message: '名称必须输入'}],
+  code: [{required: true, message: '权限值必须输入'}],
+}
+
+// 按钮功能权限校验的规则
+const btnRules = { 
+  name: [{required: true, message: '名称必须输入'}],
+  code: [{required: true, trigger: 'blur', message: '功能权限值必须输入'}]
+}
+
+export default {
+  name: 'PermissionList',
+
+  data() {
+    return {
+      menuPermissionList: [], // 菜单列表
+      expandKeys: [], // 需要自动展开的项
+      dialogPermissionVisible: false, // 是否显示菜单权限的Dialog
+      permission: { // 要操作的菜单权限对象
+        level: 0,
+        name: '',
+        code: '',
+        toCode: ''
+      }, 
+    }
+  },
+
+  computed: {
+    /* 
+    动态计算得到Dialog的标题
+    */
+    dialogTitle () {
+      const {id, level} = this.permission
+      if (id) {
+        return level===4 ? '修改功能' : '修改菜单'
+      } else {
+        return level===4 ? '添加功能' : '添加菜单'
+      }
+    },
+
+    /* 
+    根据权限的等级来计算确定校验规则
+    */
+    permissionRules () {
+      return this.permission.level===4 ? btnRules : menuRules
+    }
+  },
+  
+  mounted () {
+    this.fetchPermissionList()
+  },
+
+  methods: {
+
+    /* 
+    根据级别得到要显示的添加dialog的标题
+    */
+    getAddTitle (level) {
+      if (level===1 || level===2) {
+        return '添加菜单'
+      } else if (level===3){
+        return '添加功能'
+      }
+    }, 
+
+    /* 
+    请求获取权限菜单数据列表
+    */
+    async fetchPermissionList() {
+      const result = await this.$API.permission.getPermissionList()
+      this.menuPermissionList = result.data.children
+      this.expandKeys = [this.menuPermissionList[0].id]
+    },
+
+    /* 
+    显示添加权限的界面(菜单或功能)
+    */
+    toAddPermission (row) {
+      this.dialogPermissionVisible = true
+      this.permission.pid = row.id
+      this.permission.level = row.level + 1
+      this.permission.type = this.permission.level===4 ? 2 : 1
+      
+      // 清除校验(必须在界面更新之后)
+      this.$nextTick(() => this.$refs.permission.clearValidate())
+    },
+
+    /* 
+    显示菜单添加或更新的dialog
+    */
+    toUpdatePermission(row) {
+      this.dialogPermissionVisible = true
+      this.permission = {...row}  // 使用浅拷贝
+      this.permission.type = this.permission.level===4 ? 2 : 1
+
+      // 清除校验(必须在界面更新之后)
+      this.$nextTick(() => this.$refs.permission.clearValidate())
+    },
+
+    /* 
+    删除某个权限节点
+    */    
+    removePermission(permission) {
+      this.$confirm('此操作将永久删除该记录, 是否继续?', '提示', {
+        type: 'warning'
+      }).then(async () => {
+        const result = await this.$API.permission.removePermission(permission.id)
+        this.$message.success(result.message || '删除成功!')
+        this.fetchPermissionList()
+      }).catch((error) => {
+        if (error==='cancel') {
+          this.$message({
+            type: 'info',
+            message: '已取消删除'
+          })
+        }
+      })
+    },
+
+    /* 
+    添加或更新功能权限
+    */
+    addOrUpdatePermission() {
+      this.$refs.permission.validate(async valid => {
+        if (valid) {
+          const { permission } = this
+          const { id } = permission
+
+          const result = await this.$API.permission[id ? 'updatePermission' : 'addPermission'](permission)
+          this.$message.success(result.message || `${id ? '修改' : '添加'}成功!`)
+          this.resetData()
+          this.fetchPermissionList()
+        }
+      })
+    },
+
+    /* 
+    重置数据
+    */
+    resetData() {
+      this.dialogPermissionVisible = false
+      this.permission = {
+        level: 0,
+        name: '',
+        code: '',
+        toCode: ''
+      }
+    }
+  }
+}
+
+</script>
